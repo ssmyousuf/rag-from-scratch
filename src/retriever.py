@@ -1,41 +1,77 @@
+from abc import ABC, abstractmethod
 import re
 
 from .models import Document, Query
 
 
-def tokenize(text: str) -> set[str]:
-    return set(re.findall(r"\b\w+\b", text.lower()))
+class Retriever(ABC):
+
+    @abstractmethod
+    def index(
+        self,
+        documents: list[Document],
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def retrieve(
+        self,
+        query: Query,
+        top_k: int = 5,
+    ) -> list[tuple[Document, float]]:
+        pass
 
 
-def score_document(query: Query, document: Document) -> int:
-    query_tokens = tokenize(query.text)
-    document_tokens = tokenize(document.text)
+class LexicalRetriever(Retriever):
 
-    return len(query_tokens & document_tokens)
+    @staticmethod
+    def tokenize(text: str) -> set[str]:
+        return set(re.findall(r"\b\w+\b", text.lower()))
 
+    def index(
+        self,
+        documents: list[Document],
+    ) -> None:
+        self.documents = documents
 
-def retrieve(
-    query: Query,
-    documents: list[Document],
-    top_k: int = 5,
-) -> list[tuple[Document, int]]:
-    scored_documents = [
-        (document, score_document(query, document))
-        for document in documents
-    ]
+    def score_document(
+        self,
+        query: Query,
+        document: Document,
+    ) -> float:
+        query_tokens = self.tokenize(query.text)
+        document_tokens = self.tokenize(document.text)
 
-    scored_documents.sort(
-        key=lambda item: item[1],
-        reverse=True,
-    )
+        return float(len(query_tokens & document_tokens))
 
-    return scored_documents[:top_k]
+    def retrieve(
+        self,
+        query: Query,
+        top_k: int = 5,
+    ) -> list[tuple[Document, float]]:
+
+        scored_documents = [
+            (
+                document,
+                self.score_document(query, document),
+            )
+            for document in self.documents
+        ]
+
+        scored_documents.sort(
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
+        return scored_documents[:top_k]
+
 
 def recall_at_k(
     query: Query,
-    retrieved_documents: list[tuple[Document, int]],
+    retrieved_documents: list[tuple[Document, float]],
     k: int,
 ) -> float:
+
     retrieved_ids = {
         document.id
         for document, _ in retrieved_documents[:k]
@@ -46,4 +82,19 @@ def recall_at_k(
     if not relevant_ids:
         return 0.0
 
-    return len(retrieved_ids & relevant_ids) / len(relevant_ids)
+    return len(
+        retrieved_ids & relevant_ids
+    ) / len(relevant_ids)
+
+def parent_recall_at_k(query, retrieved_documents, k):
+    retrieved_parent_ids = {
+        document.metadata.get("parent_id", document.id)
+        for document, _ in retrieved_documents[:k]
+    }
+
+    relevant_ids = set(query.supporting_documents)
+
+    if not relevant_ids:
+        return 0.0
+
+    return len(retrieved_parent_ids & relevant_ids) / len(relevant_ids)

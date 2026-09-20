@@ -1,7 +1,17 @@
 from datasets import load_dataset
 
 from .models import Document, Query
-from .retriever import recall_at_k, retrieve
+from .retriever import recall_at_k, LexicalRetriever
+
+from .corpus import Corpus
+
+def build_corpus(examples):
+    all_documents = []
+
+    for example in examples:
+        all_documents.extend(build_documents(example))
+
+    return Corpus(all_documents)
 
 def build_documents(example):
     documents = []
@@ -47,17 +57,25 @@ def main():
     print(f"Answer: {query.answer}")
     print(f"Supporting documents: {query.supporting_documents}")
     print(f"Number of documents: {len(documents)}")
-    results = retrieve(query, documents, top_k=5)
+    # retriever = LexicalRetriever();
+    # results = retriever.retrieve(query, top_k=5)
 
-    print("\nTop retrieved documents:")
+    # print("\nTop retrieved documents:")
 
-    for rank, (document, score) in enumerate(results, start=1):
-        print(f"{rank}. {document.title} - score={score}")
+    # for rank, (document, score) in enumerate(results, start=1):
+    #     print(f"{rank}. {document.title} - score={score}")
 
-    recall = recall_at_k(query, results, k=5)
+    # recall = recall_at_k(query, results, k=5)
 
-    print(f"\nRecall@5: {recall:.2f}")
+    # print(f"\nRecall@5: {recall:.2f}")
 
+    examples = dataset["validation"].select(range(100))
+
+    corpus = build_corpus(examples)
+
+    print("Total documents:", len(corpus))
+
+    print(corpus.documents[:3])
 
 if __name__ == "__main__":
     main()
